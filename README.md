@@ -40,24 +40,24 @@ Each CSV file contains one year of daily historical price data with the followin
 
 | Column | Description |
 |--------|-------------|
-| Date | Trading date (YYYY-MM-DD) |
+| Date | Trading date |
+| Price | Closing price |
 | Open | Opening price |
 | High | Daily high |
 | Low | Daily low |
-| Close | Closing price |
-| Volume | Trading volume |
-
-Note: Crypto data may include weekend entries since crypto markets trade 24/7.
+| Vol. | Trading volume |
+| Change % | Daily percentage change |
 
 ---
 
 ## Forecasting Approach
 
-Each asset is modeled using time series forecasting techniques trained on the one-year historical CSV data, producing a 30/60/90-day price forecast.
+Each asset is modeled using two basic forecasting techniques trained on the one-year historical CSV data, producing a 30/60/90-day price forecast.
 
 Models used:
--**moving average** - smooths out the historical data and projects the trend
-- **Linear Regression** — baseline trend extrapolation
+
+- **Linear Regression** — fits a trend line through historical prices and extends it forward
+- **Moving Average** — smooths out historical data and projects the continuing trend
 
 ---
 
@@ -66,7 +66,7 @@ Models used:
 Plots are generated in R using `ggplot2` and include:
 
 - Historical price trend over the past year
-- Forecasted price trajectory with confidence intervals
+- Forecasted price trajectory
 - Side-by-side comparison of all three assets
 - Projected percentage return over the forecast window
 
@@ -91,7 +91,7 @@ A final summary table states which asset is recommended and why.
 ### 1. Install required R packages
 
 ```r
-install.packages(c("tidyverse", "ggplot2", "readr", "writexl"))
+install.packages(c("tidyverse", "writexl"))
 ```
 
 ### 2. Add CSV data
@@ -128,11 +128,7 @@ Open `outputs/forecasted_prices.xlsx` for charts and `outputs/recommendation_rep
 
 ```
 tidyverse
-forecast
-ggplot2
-readr
 writexl
-prophet
 ```
 
 ---
@@ -145,5 +141,5 @@ This project is for educational and research purposes only. Forecasts are based 
 
 ## Authors
 
-Rajveer, Andrew, and Joshua  
+Raj, Javeer, Andrew, and Joshua  
 Pennsylvania State University
