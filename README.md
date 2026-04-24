@@ -56,10 +56,8 @@ Note: Crypto data may include weekend entries since crypto markets trade 24/7.
 Each asset is modeled using time series forecasting techniques trained on the one-year historical CSV data, producing a 30/60/90-day price forecast.
 
 Models used:
-
-- **ARIMA / SARIMA** — captures trend and seasonality in price movements
+-**moving average** - smooths out the historical data and projects the trend
 - **Linear Regression** — baseline trend extrapolation
-- **Prophet** — robust to missing data and irregular patterns (optional)
 
 ---
 
