@@ -91,7 +91,7 @@ A final summary table states which asset is recommended and why.
 ### 1. Install required R packages
 
 ```r
-install.packages(c("tidyverse", "forecast", "ggplot2", "readr", "writexl", "prophet"))
+install.packages(c("tidyverse", "ggplot2", "readr", "writexl"))
 ```
 
 ### 2. Add CSV data
