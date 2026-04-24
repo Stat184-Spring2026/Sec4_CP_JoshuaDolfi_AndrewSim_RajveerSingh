@@ -141,5 +141,5 @@ This project is for educational and research purposes only. Forecasts are based 
 
 ## Authors
 
-Raj, Javeer, Andrew, and Joshua  
+Rajveer, Andrew, and Joshua  
 Pennsylvania State University
