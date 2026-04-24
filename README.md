@@ -1,28 +1,149 @@
-# Project Title
+# Investment Forecasting Dashboard
 
-Write a 1-2 sentences that quickly and clearly convey what your repo is for.
+A data-driven forecasting tool that analyzes historical price data across three major asset classes — Gold, S&P 500, and Cryptocurrency — and recommends where to allocate your money for the best long-term returns.
 
-## Overview
+---
 
-Expand on those introductory sentences with a brief but informative description of your project's purpose and goals. This section should help visitors decide whether they should dig deeper into your repo/project.
+## Project Goal
 
-### Interesting Insight (Optional)
+Forecast future prices for Gold, the S&P 500, and Cryptocurrency using one year of historical data, then provide a clear, data-backed recommendation on which asset offers the best long-term investment opportunity.
 
-This is optional but highly recommended. You'll include one interesting insight from your project as part of the README. This insight is most effective when you include a visual. Keep in mind that this visual must be included as an image file (e.g., JPG, PNG, etc.). You can export plots created with `{ggplot2}` by using the function `ggsave`.
+---
 
-## Data Sources and Acknowledgements
+## Project Structure
 
-Be sure to list where you got any data used within the project. Be sure to acknowledge any one whose work or elements you're drawing upon.
+```
+investment-forecasting/
+│
+├── data/
+│   ├── gold_prices.csv
+│   ├── sp500_prices.csv
+│   └── crypto_prices.csv
+│
+├── forecasting/
+│   ├── gold_forecast.R
+│   ├── sp500_forecast.R
+│   └── crypto_forecast.R
+│
+├── outputs/
+│   ├── forecasted_prices.xlsx
+│   └── recommendation_report.xlsx
+│
+├── README.md
+```
 
-## Current Plan
+---
 
-Provide some information about what you intend to do with the project. You can additionally refer the visitor to your detailed plan document.
+## Data
 
-## Repo Structure
+Each CSV file contains one year of daily historical price data with the following columns:
 
-Use this section to explain the structure of your repo. This should help visitors quickly figure out where they should look to find certain elements. Further, you can use this space to highlight and briefly explain important/key files in the repo.
+| Column | Description |
+|--------|-------------|
+| Date | Trading date (YYYY-MM-DD) |
+| Open | Opening price |
+| High | Daily high |
+| Low | Daily low |
+| Close | Closing price |
+| Volume | Trading volume |
 
+Note: Crypto data may include weekend entries since crypto markets trade 24/7.
+
+---
+
+## Forecasting Approach
+
+Each asset is modeled using time series forecasting techniques trained on the one-year historical CSV data, producing a 30/60/90-day price forecast.
+
+Models used:
+-**moving average** - smooths out the historical data and projects the trend
+- **Linear Regression** — baseline trend extrapolation
+
+---
+
+## Visualizations
+
+Plots are generated in R using `ggplot2` and include:
+
+- Historical price trend over the past year
+- Forecasted price trajectory with confidence intervals
+- Side-by-side comparison of all three assets
+- Projected percentage return over the forecast window
+
+Plots are exported to Excel for the final deliverable.
+
+---
+
+## Recommendation Logic
+
+Assets are ranked based on:
+
+1. Projected percentage return
+2. Volatility and risk
+3. Risk-adjusted return (Sharpe-style score)
+
+A final summary table states which asset is recommended and why.
+
+---
+
+## How to Run
+
+### 1. Install required R packages
+
+```r
+install.packages(c("tidyverse", "ggplot2", "readr", "writexl"))
+```
+
+### 2. Add CSV data
+
+Place your data files in the `data/` folder following the column structure above.
+
+### 3. Run the forecasting scripts
+
+Open each script in RStudio and run, or execute from the terminal:
+
+```bash
+Rscript forecasting/gold_forecast.R
+Rscript forecasting/sp500_forecast.R
+Rscript forecasting/crypto_forecast.R
+```
+
+### 4. View output
+
+Open `outputs/forecasted_prices.xlsx` for charts and `outputs/recommendation_report.xlsx` for the final recommendation.
+
+---
+
+## Assets Covered
+
+| Asset | Description | Risk Level |
+|-------|-------------|------------|
+| Gold | Traditional safe-haven commodity | Low to Medium |
+| S&P 500 | Index of 500 large US companies | Medium |
+| Crypto | Cryptocurrency (e.g. BTC, ETH) | High |
+
+---
+
+## Dependencies
+
+```
+tidyverse
+forecast
+ggplot2
+readr
+writexl
+prophet
+```
+
+---
+
+## Disclaimer
+
+This project is for educational and research purposes only. Forecasts are based on historical data and statistical models and do not constitute financial advice. Always do your own research before making investment decisions.
+
+---
 
 ## Authors
 
-Give information about who are the authors of the project and how people can get in touch if they have questions.
+Rajveer, Andrew, and Joshua  
+Pennsylvania State University
