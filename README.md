@@ -1,36 +1,22 @@
-# Investment Forecasting Dashboard
+# Investment Analysis
 
-A data-driven forecasting tool that analyzes historical price data across three major asset classes — Gold, S&P 500, and Cryptocurrency — and recommends where to allocate your money for the best long-term returns.
+Data-driven insight into different markets, able to be traded on.
 
 ---
 
 ## Project Goal
 
-Forecast future prices for Gold, the S&P 500, and Cryptocurrency using one year of historical data, then provide a clear, data-backed recommendation on which asset offers the best long-term investment opportunity.
+Analyze the historical data of the S&P 500, Bitcoin, and Gold to see which makes the best investment.
 
 ---
 
 ## Project Structure
 
-```
-investment-forecasting/
-│
-├── data/
-│   ├── gold_prices.csv
-│   ├── sp500_prices.csv
-│   └── crypto_prices.csv
-│
-├── forecasting/
-│   ├── gold_forecast.R
-│   ├── sp500_forecast.R
-│   └── crypto_forecast.R
-│
-├── outputs/
-│   ├── forecasted_prices.xlsx
-│   └── recommendation_report.xlsx
-│
-├── README.md
-```
+Bitcoin.csv
+S&P500.csv
+Gold.csv
+
+S&P_Data.R
 
 ---
 
@@ -76,11 +62,7 @@ Plots are exported to Excel for the final deliverable.
 
 ## Recommendation Logic
 
-Assets are ranked based on:
-
-1. Projected percentage return
-2. Volatility and risk
-3. Risk-adjusted return (Sharpe-style score)
+Assets are ranked based on volatility and risk
 
 A final summary table states which asset is recommended and why.
 
@@ -98,19 +80,7 @@ install.packages(c("tidyverse", "writexl"))
 
 Place your data files in the `data/` folder following the column structure above.
 
-### 3. Run the forecasting scripts
-
-Open each script in RStudio and run, or execute from the terminal:
-
-```bash
-Rscript forecasting/gold_forecast.R
-Rscript forecasting/sp500_forecast.R
-Rscript forecasting/crypto_forecast.R
-```
-
-### 4. View output
-
-Open `outputs/forecasted_prices.xlsx` for charts and `outputs/recommendation_report.xlsx` for the final recommendation.
+Open each script in RStudio and run
 
 ---
 
@@ -130,12 +100,6 @@ Open `outputs/forecasted_prices.xlsx` for charts and `outputs/recommendation_rep
 tidyverse
 writexl
 ```
-
----
-
-## Disclaimer
-
-This project is for educational and research purposes only. Forecasts are based on historical data and statistical models and do not constitute financial advice. Always do your own research before making investment decisions.
 
 ---
 
