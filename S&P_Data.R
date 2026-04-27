@@ -9,7 +9,8 @@ sp_data <- sp_data %>% select(-"Vol.")
 
 #Edit the % Change Column
 sp_data <- sp_data %>%
-  mutate(`Percent Change` = as.numeric(gsub("%", "", `Change..`)), 
+  mutate(`Percent Change` = as.numeric(gsub("%", "", `Change..`)),
+         `Percent Change` = abs(`Percent Change`),
          Date = as.Date(Date, format = "%m/%d/%Y"),) %>%
   select(-`Change..`)
 
