@@ -139,6 +139,12 @@ This project is for educational and research purposes only. Forecasts are based 
 
 ---
 
+## Data Source 
+
+Historical market data for Bitcoin, Gold, and the S&P 500 was collected from Investing.com.
+
+---
+
 ## Authors
 
 Rajveer, Andrew, and Joshua  
