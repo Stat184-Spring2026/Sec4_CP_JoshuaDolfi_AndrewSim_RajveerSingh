@@ -1,0 +1,552 @@
+---
+title: "Investment Analysis: S&P 500, Bitcoin, and Gold"
+subtitle: "A reproducible one-year historical comparison with 30/60/90-day forecasts"
+author: "Rajveer, Andrew, and Joshua"
+institute: "Pennsylvania State University"
+date: today
+format:
+  pdf:
+    toc: false
+    number-sections: true
+    colorlinks: true
+    geometry: margin=1in
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup, include=FALSE}
+# Code Style Guide: tidyverse style guide (https://style.tidyverse.org/)
+# Code Header: Primary author: Andrew Sim; Reviewer: Rajveer Singh and Joshua Dolfi
+
+library(tidyverse)
+library(lubridate)
+library(knitr)
+library(scales)
+
+options(scipen = 999)
+
+find_file <- function(file_names, asset_name = NULL) {
+  search_dirs <- c(".", "data", "..", file.path("..", "data"))
+
+  # First, try exact filename matches.
+  candidates <- expand_grid(search_dir = search_dirs, file_name = file_names) |>
+    mutate(path = file.path(search_dir, file_name)) |>
+    pull(path)
+
+  existing <- candidates[file.exists(candidates)]
+  if (length(existing) > 0) {
+    return(existing[[1]])
+  }
+
+  # Second, search available CSV files by flexible asset-specific patterns.
+  all_csv_files <- search_dirs |>
+    map(\(search_dir) {
+      if (dir.exists(search_dir)) {
+        list.files(search_dir, pattern = "\\.csv$", full.names = TRUE, ignore.case = TRUE)
+      } else {
+        character(0)
+      }
+    }) |>
+    unlist() |>
+    unique()
+
+  if (length(all_csv_files) > 0 && !is.null(asset_name)) {
+    csv_names <- basename(all_csv_files) |> str_to_lower()
+
+    asset_pattern <- case_when(
+      str_detect(str_to_lower(asset_name), "s&p|sp|500") ~ "s&p|s & p|sp500|s_p|s-p|snp|500|standard.*poor",
+      str_detect(str_to_lower(asset_name), "gold") ~ "gold",
+      str_detect(str_to_lower(asset_name), "bitcoin|btc") ~ "bitcoin|btc|bitfinex",
+      TRUE ~ str_to_lower(asset_name)
+    )
+
+    matches <- all_csv_files[str_detect(csv_names, asset_pattern)]
+    if (length(matches) > 0) {
+      return(matches[[1]])
+    }
+  }
+
+  available <- if (length(all_csv_files) == 0) {
+    "No CSV files were found in ., data/, .., or ../data/."
+  } else {
+    paste(basename(all_csv_files), collapse = ", ")
+  }
+
+  stop(
+    paste(
+      "Could not find a CSV file for", asset_name,
+      "using these expected names:", paste(file_names, collapse = ", "),
+      "Available CSV files:", available
+    )
+  )
+}
+
+clean_asset_data <- function(file_names, asset_name, risk_level) {
+  read_csv(find_file(file_names, asset_name), show_col_types = FALSE) |>
+    clean_names_for_project() |>
+    mutate(
+      Date = mdy(Date),
+      Price = parse_number(as.character(Price)),
+      Open = parse_number(as.character(Open)),
+      High = parse_number(as.character(High)),
+      Low = parse_number(as.character(Low)),
+      Change_Percent = parse_number(as.character(Change_Percent)) / 100,
+      Asset = asset_name,
+      Risk_Level = risk_level
+    ) |>
+    arrange(Date) |>
+    mutate(
+      day_index = row_number(),
+      daily_return = Price / lag(Price) - 1,
+      daily_volatility = (High - Low) / Open,
+      drawdown = Price / cummax(Price) - 1,
+      month = floor_date(Date, "month"),
+      rolling_30_day_mean = stats::filter(Price, rep(1 / 30, 30), sides = 1) |>
+        as.numeric()
+    )
+}
+
+clean_names_for_project <- function(data_frame) {
+  data_frame |>
+    rename_with(\(x) str_replace_all(x, c("Change %" = "Change_Percent")))
+}
+
+forecast_asset <- function(asset_df, horizon_days = c(30, 60, 90), ma_window = 30) {
+  fit <- lm(Price ~ day_index, data = asset_df)
+  last_day <- max(asset_df$day_index)
+  last_date <- max(asset_df$Date)
+  last_price <- asset_df$Price[asset_df$day_index == last_day][[1]]
+  ma_change <- mean(tail(asset_df$daily_return, ma_window), na.rm = TRUE)
+
+  future_df <- tibble(
+    horizon_days = horizon_days,
+    day_index = last_day + horizon_days,
+    Date = last_date + days(horizon_days)
+  )
+
+  linear_forecast <- future_df |>
+    mutate(
+      Model = "Linear Regression",
+      Forecast_Price = as.numeric(predict(fit, newdata = future_df)),
+      Projected_Return = Forecast_Price / last_price - 1
+    )
+
+  moving_average_forecast <- future_df |>
+    mutate(
+      Model = "Moving Average",
+      Forecast_Price = last_price * (1 + ma_change) ^ horizon_days,
+      Projected_Return = Forecast_Price / last_price - 1
+    )
+
+  bind_rows(linear_forecast, moving_average_forecast) |>
+    mutate(Asset = unique(asset_df$Asset))
+}
+
+asset_files <- tribble(
+  ~Asset, ~Risk_Level, ~File_Names,
+  "S&P 500", "Medium", list(c("S&P 500 Historical Data.csv", "S&P500.csv", "S&P_Data.csv", "SP500.csv")),
+  "Gold", "Low to Medium", list(c("Gold Futures Historical Data(1).csv", "Gold Futures Historical Data.csv", "Gold.csv")),
+  "Bitcoin", "High", list(c("BTC_USD Bitfinex Historical Data-2.csv", "Bitcoin.csv", "BTC_USD.csv", "BTC.csv"))
+)
+
+asset_data <- asset_files |>
+  mutate(data = pmap(list(File_Names, Asset, Risk_Level), clean_asset_data)) |>
+  select(data) |>
+  unnest(data)
+
+summary_table <- asset_data |>
+  group_by(Asset, Risk_Level) |>
+  summarize(
+    Start_Date = min(Date),
+    End_Date = max(Date),
+    Start_Price = first(Price),
+    End_Price = last(Price),
+    One_Year_Return = End_Price / Start_Price - 1,
+    Average_Daily_Return = mean(daily_return, na.rm = TRUE),
+    Annualized_Volatility = sd(daily_return, na.rm = TRUE) * sqrt(252),
+    Average_Daily_Range = mean(daily_volatility, na.rm = TRUE),
+    Max_Drawdown = min(drawdown, na.rm = TRUE),
+    Observations = n(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    Risk_Adjusted_Score = One_Year_Return / Annualized_Volatility,
+    Recommendation_Rank = rank(-Risk_Adjusted_Score, ties.method = "first")
+  ) |>
+  arrange(Recommendation_Rank)
+
+monthly_return_table <- asset_data |>
+  group_by(Asset, month) |>
+  summarize(
+    Monthly_Return = last(Price) / first(Price) - 1,
+    Average_Daily_Range = mean(daily_volatility, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+forecast_data <- asset_data |>
+  group_split(Asset) |>
+  map_dfr(forecast_asset)
+
+forecast_summary <- forecast_data |>
+  filter(horizon_days == 90) |>
+  group_by(Asset) |>
+  summarize(
+    Average_90_Day_Forecast_Return = mean(Projected_Return, na.rm = TRUE),
+    Linear_Regression_90_Day_Return = Projected_Return[Model == "Linear Regression"],
+    Moving_Average_90_Day_Return = Projected_Return[Model == "Moving Average"],
+    .groups = "drop"
+  ) |>
+  left_join(summary_table, by = "Asset") |>
+  arrange(desc(Risk_Adjusted_Score))
+
+recommended_asset <- summary_table$Asset[[1]]
+recommended_risk <- summary_table$Risk_Level[[1]]
+recommended_return <- summary_table$One_Year_Return[[1]]
+recommended_vol <- summary_table$Annualized_Volatility[[1]]
+```
+
+# Executive Summary
+
+This report compares three tradable markets: the S&P 500, Bitcoin, and Gold. The project goal is to use one year of historical daily price data to understand which asset offers the strongest investment case when both return and risk are considered. The analysis focuses on historical performance, daily volatility, drawdowns, and simple 30/60/90-day forecasts.
+
+Based on the risk-adjusted ranking in @tbl-summary, **`r recommended_asset`** is the strongest overall recommendation in this dataset. It combines a one-year return of **`r percent(recommended_return, accuracy = 0.1)`** with annualized volatility of **`r percent(recommended_vol, accuracy = 0.1)`** and a **`r recommended_risk`** risk profile. This does not mean the asset is guaranteed to outperform in the future; rather, it performed best under the simple ranking method used in this report.
+
+# Data and Market Context
+
+The dataset contains one year of daily historical prices for the S&P 500, Bitcoin, and Gold. Each file includes the trading date, closing price, opening price, daily high, daily low, trading volume, and daily percentage change. These variables allow the analysis to compare both return and risk.
+
+The three assets represent different market roles. Gold is commonly treated as a defensive or safe-haven commodity, the S&P 500 represents broad U.S. equity market exposure, and Bitcoin represents a higher-risk cryptocurrency market. Because these assets have different risk profiles, the final recommendation is not based only on raw return. It also considers volatility and drawdown risk.
+
+## Data Provenance
+
+The data for this project were downloaded from Investing.com, a financial market website that provides market quotes, charts, news, tools, and market information for indices, commodities, futures, and cryptocurrencies. The team used the historical data download pages for the S&P 500, Gold Futures, and BTC/USD. The original data were collected as financial market trading records: each row represents one trading date and includes fields such as closing price, opening price, daily high, daily low, volume, and percent change.
+
+For this report, the data are treated as secondary observational data. The team did not create fake data and did not use Kaggle. The purpose of collecting the files was to compare three different investment markets over the same general one-year period and evaluate the relationship between return and risk.
+
+## FAIR and CARE Principles
+
+The data partially satisfy the FAIR principles. They are findable because Investing.com makes historical market pages searchable by asset name, and they are accessible because users can download the files from the website. They are interoperable because CSV files can be read by common tools such as R, Python, and spreadsheet software. They are reusable for classroom analysis as long as the source is cited and the files are kept in the project repo.
+
+The CARE principles are less central because these are financial market data rather than data about Indigenous communities. Still, the project follows the spirit of CARE by being transparent about the data source, avoiding claims beyond what the data can support, and using the analysis for an educational purpose rather than presenting it as professional financial advice.
+
+## Attributes Used in the Analysis
+
+The original attributes used in this report are date, price, open, high, low, volume, and percent change. The created attributes include daily return, daily volatility, monthly return, drawdown, 30-day rolling mean, annualized volatility, maximum drawdown, risk-adjusted score, and 30/60/90-day forecast returns. These created variables make the comparison richer because they measure not only whether prices increased, but also how unstable or risky each asset was during the period.
+
+```{r tbl-data-description}
+# Code Header: Primary author: Joshua Dolfi; Reviewer: Andrew Sim and Rajveer Singh
+asset_description <- tibble(
+  Asset = c("Gold", "S&P 500", "Bitcoin"),
+  Description = c("Traditional safe-haven commodity", "Index of 500 large U.S. companies", "Cryptocurrency market exposure"),
+  Risk_Level = c("Low to Medium", "Medium", "High")
+)
+
+kable(
+  asset_description,
+  caption = "Assets covered in the investment analysis.",
+  booktabs = TRUE
+)
+```
+
+# Historical Price Trends
+
+@fig-price-trends shows the historical price movement for each asset over the one-year period. The plot is indexed separately by asset, so the purpose is to understand each asset's direction and trend rather than directly compare price levels. Bitcoin typically has a much larger price scale than Gold or the S&P 500, so separating the panels prevents one asset from visually dominating the chart.
+
+```{r fig-price-trends, fig.cap="Historical closing price trends for the S&P 500, Bitcoin, and Gold.", fig.alt="Three faceted line charts showing one year of closing price trends for the S&P 500, Bitcoin, and Gold.", fig.width=7.5, fig.height=5.2}
+# Code Header: Primary author: Andrew Sim; Reviewer: Rajveer Singh and Joshua Dolfi
+ggplot(asset_data, aes(x = Date, y = Price)) +
+  geom_line(linewidth = 0.7) +
+  facet_wrap(~ Asset, scales = "free_y", ncol = 1) +
+  scale_x_date(date_labels = "%b %Y") +
+  scale_y_continuous(labels = comma) +
+  labs(
+    x = "Date",
+    y = "Closing Price",
+    title = "Historical Price Trend by Asset"
+  ) +
+  theme_minimal(base_size = 11)
+```
+
+The historical trend provides the first part of the investment story: price growth matters, but the path to that growth also matters. A smoother upward path is usually easier for investors to hold through, while large swings increase uncertainty and emotional risk.
+
+# Return and Risk Comparison
+
+@tbl-summary summarizes the main risk and return metrics used for the recommendation. One-year return measures total price growth over the sample period. Annualized volatility estimates how much the asset fluctuates based on daily returns. Maximum drawdown captures the worst peak-to-trough decline during the period.
+
+```{r tbl-summary}
+# Code Header: Primary author: Rajveer Singh; Reviewer: Andrew Sim and Joshua Dolfi
+summary_table_display <- summary_table |>
+  transmute(
+    Rank = Recommendation_Rank,
+    Asset,
+    `Risk Level` = Risk_Level,
+    `One-Year Return` = percent(One_Year_Return, accuracy = 0.1),
+    `Annualized Volatility` = percent(Annualized_Volatility, accuracy = 0.1),
+    `Average Daily Range` = percent(Average_Daily_Range, accuracy = 0.1),
+    `Max Drawdown` = percent(Max_Drawdown, accuracy = 0.1),
+    `Risk-Adjusted Score` = round(Risk_Adjusted_Score, 2)
+  )
+
+kable(
+  summary_table_display,
+  caption = "Risk and return summary used to rank the assets.",
+  booktabs = TRUE,
+  align = "l"
+)
+```
+
+The ranking in @tbl-summary reflects a tradeoff: the best investment is not necessarily the asset with the highest return. An asset with high return but extremely high volatility can be less attractive than an asset with moderate return and more stable performance.
+
+```{r fig-risk-return, fig.cap="Risk-return comparison using one-year return and annualized volatility.", fig.alt="Scatter plot comparing each asset by annualized volatility on the x-axis and one-year return on the y-axis.", fig.width=7.2, fig.height=4.6}
+# Code Header: Primary author: Joshua Dolfi; Reviewer: Andrew Sim and Rajveer Singh
+ggplot(summary_table, aes(x = Annualized_Volatility, y = One_Year_Return, label = Asset)) +
+  geom_point(size = 3) +
+  geom_text(nudge_y = 0.025, check_overlap = TRUE) +
+  scale_x_continuous(labels = percent) +
+  scale_y_continuous(labels = percent) +
+  labs(
+    x = "Annualized Volatility",
+    y = "One-Year Return",
+    title = "Return Versus Risk"
+  ) +
+  theme_minimal(base_size = 11)
+```
+
+@fig-risk-return helps connect the numerical ranking to a visual investment decision. Assets higher on the chart produced stronger returns, while assets farther to the right carried more volatility. A strong candidate is one that appears relatively high without moving too far right.
+
+
+# Monthly Return Patterns
+
+@fig-monthly-return adds a second layer to the analysis by showing whether returns were concentrated in only a few months or spread more evenly across the year. This matters because two assets can have similar one-year returns but very different paths. A steadier pattern may be easier for investors to tolerate, while sharp monthly gains and losses suggest greater timing risk.
+
+```{r fig-monthly-return, fig.cap="Monthly return patterns by asset.", fig.alt="Faceted column charts showing monthly percentage returns for the S&P 500, Bitcoin, and Gold.", fig.width=7.5, fig.height=5}
+# Code Header: Primary author: Andrew Sim; Reviewer: Rajveer Singh and Joshua Dolfi
+ggplot(monthly_return_table, aes(x = month, y = Monthly_Return)) +
+  geom_col() +
+  facet_wrap(~ Asset, ncol = 1) +
+  scale_x_date(date_labels = "%b %Y") +
+  scale_y_continuous(labels = percent) +
+  labs(
+    x = "Month",
+    y = "Monthly Return",
+    title = "Monthly Return by Asset"
+  ) +
+  theme_minimal(base_size = 11)
+```
+
+# Forecasting Approach
+
+Two simple forecasting models are used to estimate future price movement over 30, 60, and 90 days. The first model is linear regression, which fits a straight trend line through historical closing prices and extends it forward. The second model is a moving-average approach, which uses recent average daily returns to project the future path.
+
+These models are intentionally simple. Their value is not that they perfectly predict the future, but that they provide a consistent baseline for comparing the three assets using the same rules.
+
+```{r fig-forecast, fig.cap="Thirty-, sixty-, and ninety-day projected returns by asset and forecasting model.", fig.alt="Grouped bar chart showing projected percentage returns for each asset at 30, 60, and 90 days using linear regression and moving average forecasts.", fig.width=7.5, fig.height=5}
+# Code Header: Primary author: Andrew Sim; Reviewer: Rajveer Singh and Joshua Dolfi
+ggplot(forecast_data, aes(x = factor(horizon_days), y = Projected_Return, fill = Model)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ Asset) +
+  scale_y_continuous(labels = percent) +
+  labs(
+    x = "Forecast Horizon (Days)",
+    y = "Projected Return",
+    fill = "Model",
+    title = "Projected Return by Forecast Horizon"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+@fig-forecast shows how the models translate past data into forward-looking expectations. When both models point in a similar direction, the signal is more consistent. When the models disagree, the forecast should be treated with more caution because the result depends heavily on the modeling assumption.
+
+```{r tbl-forecast}
+# Code Header: Primary author: Rajveer Singh; Reviewer: Andrew Sim and Joshua Dolfi
+forecast_display <- forecast_summary |>
+  transmute(
+    Asset,
+    `Risk Level` = Risk_Level,
+    `Average 90-Day Forecast Return` = percent(Average_90_Day_Forecast_Return, accuracy = 0.1),
+    `Linear Regression 90-Day Return` = percent(Linear_Regression_90_Day_Return, accuracy = 0.1),
+    `Moving Average 90-Day Return` = percent(Moving_Average_90_Day_Return, accuracy = 0.1),
+    `Historical Risk-Adjusted Score` = round(Risk_Adjusted_Score, 2)
+  )
+
+kable(
+  forecast_display,
+  caption = "Forecast summary for the 90-day investment window.",
+  booktabs = TRUE,
+  align = "l"
+)
+```
+
+@tbl-forecast adds the forecast results to the historical risk-adjusted ranking. This is important because a final investment decision should consider both what happened historically and what the simple projection suggests may happen next.
+
+# Recommendation
+
+The recommended asset is **`r recommended_asset`**. This recommendation is based on the asset's balance of return and risk over the one-year historical period. In this report, the asset with the strongest risk-adjusted score receives the highest rank because it gave the best return per unit of volatility.
+
+For a conservative investor, Gold may still be attractive because its role is often to reduce risk rather than maximize return. For an investor seeking broad market exposure, the S&P 500 may be a balanced choice. For an investor willing to accept large price swings, Bitcoin may offer upside potential, but its volatility and drawdown risk make it less stable.
+
+Overall, the analysis shows that investment quality depends on both reward and risk. The strongest asset is not simply the one with the highest price growth, but the one that gives the most reasonable tradeoff between growth, volatility, and downside risk.
+
+# Open Science, Reproducibility, and PCIP
+
+This project follows open science principles by keeping the report in a reproducible QMD file, documenting the source of the data, using readable code, and separating interpretation from hidden computational steps. The report also follows PCIP principles by explaining the project context, showing the process used to clean and analyze the data, interpreting the results in plain language, and acknowledging limitations instead of overstating the conclusion.
+
+The repo should include the QMD report, the CSV data files or a clear data-access note, the project plan, README, and final PDF. Team members should also use commits, issues, branches, and pull requests so that the project history shows how the work developed over time.
+
+# Limitations
+
+This report uses only one year of daily data, so the results may be sensitive to the chosen time period. The forecasting models are basic and do not include macroeconomic variables, interest rates, inflation, investor sentiment, or major news events. The forecasts should therefore be interpreted as simple trend-based projections rather than guaranteed predictions.
+
+# Data Source Citation
+
+Investing.com. (2026). *Financial market historical data for S&P 500, Gold Futures, and BTC/USD*. Retrieved from Investing.com historical data pages. The files used in this report were downloaded by the project team for classroom analysis.
+
+# Author Contributions
+
+Andrew Sim was the main author for the introduction, historical price trend visualization, monthly return visualization, and forecasting interpretation. Rajveer Singh was the main author for the risk-return summary tables and helped review the data cleaning process. Joshua Dolfi was the main author for the data description, risk-return visualization, and market context. All team members contributed to the final recommendation, reviewed the report narrative, and checked that the QMD file could be reproduced from the project data files.
+
+# Code Appendix
+
+The code below reproduces the full analysis. It is placed in the appendix so that the body of the PDF report remains focused on interpretation and narrative.
+
+```{r code-appendix, echo=TRUE, eval=FALSE}
+# Code Style Guide: tidyverse style guide (https://style.tidyverse.org/)
+# Code Header: Primary author: Andrew Sim; Reviewer: Rajveer Singh and Joshua Dolfi
+
+library(tidyverse)
+library(lubridate)
+library(knitr)
+library(scales)
+
+options(scipen = 999)
+
+find_file <- function(file_names) {
+  search_dirs <- c(".", "data", "..", file.path("..", "data"))
+  candidates <- expand_grid(search_dir = search_dirs, file_name = file_names) |>
+    mutate(path = file.path(search_dir, file_name)) |>
+    pull(path)
+
+  existing <- candidates[file.exists(candidates)]
+
+  if (length(existing) == 0) {
+    stop(
+      paste(
+        "Could not find any of these files:",
+        paste(file_names, collapse = ", "),
+        "in the project folder, data/ folder, parent folder, or ../data/ folder."
+      )
+    )
+  }
+
+  existing[[1]]
+}
+
+clean_names_for_project <- function(data_frame) {
+  data_frame |>
+    rename_with(\(x) str_replace_all(x, c("Change %" = "Change_Percent")))
+}
+
+clean_asset_data <- function(file_names, asset_name, risk_level) {
+  read_csv(find_file(file_names, asset_name), show_col_types = FALSE) |>
+    clean_names_for_project() |>
+    mutate(
+      Date = mdy(Date),
+      Price = parse_number(as.character(Price)),
+      Open = parse_number(as.character(Open)),
+      High = parse_number(as.character(High)),
+      Low = parse_number(as.character(Low)),
+      Change_Percent = parse_number(as.character(Change_Percent)) / 100,
+      Asset = asset_name,
+      Risk_Level = risk_level
+    ) |>
+    arrange(Date) |>
+    mutate(
+      day_index = row_number(),
+      daily_return = Price / lag(Price) - 1,
+      daily_volatility = (High - Low) / Open,
+      drawdown = Price / cummax(Price) - 1,
+      month = floor_date(Date, "month"),
+      rolling_30_day_mean = stats::filter(Price, rep(1 / 30, 30), sides = 1) |>
+        as.numeric()
+    )
+}
+
+forecast_asset <- function(asset_df, horizon_days = c(30, 60, 90), ma_window = 30) {
+  fit <- lm(Price ~ day_index, data = asset_df)
+  last_day <- max(asset_df$day_index)
+  last_date <- max(asset_df$Date)
+  last_price <- asset_df$Price[asset_df$day_index == last_day][[1]]
+  ma_change <- mean(tail(asset_df$daily_return, ma_window), na.rm = TRUE)
+
+  future_df <- tibble(
+    horizon_days = horizon_days,
+    day_index = last_day + horizon_days,
+    Date = last_date + days(horizon_days)
+  )
+
+  linear_forecast <- future_df |>
+    mutate(
+      Model = "Linear Regression",
+      Forecast_Price = as.numeric(predict(fit, newdata = future_df)),
+      Projected_Return = Forecast_Price / last_price - 1
+    )
+
+  moving_average_forecast <- future_df |>
+    mutate(
+      Model = "Moving Average",
+      Forecast_Price = last_price * (1 + ma_change) ^ horizon_days,
+      Projected_Return = Forecast_Price / last_price - 1
+    )
+
+  bind_rows(linear_forecast, moving_average_forecast) |>
+    mutate(Asset = unique(asset_df$Asset))
+}
+
+asset_files <- tribble(
+  ~Asset, ~Risk_Level, ~File_Names,
+  "S&P 500", "Medium", list(c("S&P 500 Historical Data.csv", "S&P500.csv", "S&P_Data.csv", "SP500.csv")),
+  "Gold", "Low to Medium", list(c("Gold Futures Historical Data(1).csv", "Gold Futures Historical Data.csv", "Gold.csv")),
+  "Bitcoin", "High", list(c("BTC_USD Bitfinex Historical Data-2.csv", "Bitcoin.csv", "BTC_USD.csv", "BTC.csv"))
+)
+
+asset_data <- asset_files |>
+  mutate(data = pmap(list(File_Names, Asset, Risk_Level), clean_asset_data)) |>
+  select(data) |>
+  unnest(data)
+
+summary_table <- asset_data |>
+  group_by(Asset, Risk_Level) |>
+  summarize(
+    Start_Date = min(Date),
+    End_Date = max(Date),
+    Start_Price = first(Price),
+    End_Price = last(Price),
+    One_Year_Return = End_Price / Start_Price - 1,
+    Average_Daily_Return = mean(daily_return, na.rm = TRUE),
+    Annualized_Volatility = sd(daily_return, na.rm = TRUE) * sqrt(252),
+    Average_Daily_Range = mean(daily_volatility, na.rm = TRUE),
+    Max_Drawdown = min(drawdown, na.rm = TRUE),
+    Observations = n(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    Risk_Adjusted_Score = One_Year_Return / Annualized_Volatility,
+    Recommendation_Rank = rank(-Risk_Adjusted_Score, ties.method = "first")
+  ) |>
+  arrange(Recommendation_Rank)
+
+monthly_return_table <- asset_data |>
+  group_by(Asset, month) |>
+  summarize(
+    Monthly_Return = last(Price) / first(Price) - 1,
+    Average_Daily_Range = mean(daily_volatility, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+forecast_data <- asset_data |>
+  group_split(Asset) |>
+  map_dfr(forecast_asset)
+```
